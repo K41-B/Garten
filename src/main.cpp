@@ -2,6 +2,7 @@
 #include <PrintEx.h>
 
 PrintEx serial = Serial;
+RTC_DATA_ATTR int bootCount = 0;
 
 //globale Variablen _ stored in RTC_data
 RTC_DATA_ATTR int soilmid[8];
@@ -9,10 +10,9 @@ RTC_DATA_ATTR int soilshould[8];
 //Schleifenzähler der Bewässerung _ stored in RTC_data
 RTC_DATA_ATTR int x=0;
 
-//Hysterese muss an Werte für Boden und Eigenschaften der Sensoren angepasst werden!
+//Hysterese kann an Werte für Boden und Eigenschaften der Sensoren angepasst werden!
 
-
-//INPUTS für Sensoren Stiftleiste
+//INPUTS für Sensoren an GPIO-Pins
 #define in0 34
 #define in1 35
 #define in2 32
@@ -26,17 +26,17 @@ RTC_DATA_ATTR int x=0;
 #define pump0 23
 
 //Output für Ventile
-//Sensoren 0 & 1 gehören zu Ventil0
+//Sensoren 0 & 1 gehören zu Ventil 0
 #define vent0 5
-//Sensoren 2&3 gehören zu Ventil 1
+//Sensoren 2 & 3 gehören zu Ventil 1
 #define vent1 18
-//Sensoren 4&5 gehören zu Ventil 2
+//Sensoren 4 & 5 gehören zu Ventil 2
 #define vent2 19
-//Sensor6&7 gehören zu Ventil 3
+//Sensoren 6 & 7 gehören zu Ventil 3
 #define vent3 21
 
-//Anzahl der Messwerte für Mittelwert
-#define MW 10
+//Anzahl der Messwerte (MW) für Median
+#define MW 9
 
 //Hysterese für Überfeuchtung
 #define HYSTERESE 100
@@ -66,22 +66,18 @@ digitalWrite(pump0,LOW);
 void failure()
 {
   deactivateall();
-  serial.printf("FEHLER-Trocken-Bewässerung gestoppt.");
+  serial.printf("FEHLER - Bewässerung gestoppt.");
   sleep(86400);
   serial.printf("Kehre nach 24h nach einem Fehler der Bewässerung zum Programm zurück.");
 }
-//Funktion für Mittelwert aus MW Messwerten für Bodenfeuchte
-double mittelwert(int * soil)
+
+//Funktion für Median aus MW Messwerten für Bodenfeuchte
+double median (int * soil)
 {
-int sum=0, i;
-
-for (i=0; i<MW; i++)
-  {
-    sum=sum+soil[i];
-
-  }
-return sum/MW;
+int index = MW/2;
+return soil[index];
 }
+
 
 //Sensorabfrage 0
 int getsensor0()
@@ -93,7 +89,7 @@ int getsensor0()
   soil[i]=analogRead(in0);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 //Sensorabfrage 1
@@ -106,7 +102,7 @@ int getsensor1()
   soil[i]=analogRead(in1);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 //Sensorabfrage 2
@@ -119,7 +115,7 @@ int getsensor2()
   soil[i]=analogRead(in2);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 //Sensorabfrage 3
@@ -132,7 +128,7 @@ int getsensor3()
   soil[i]=analogRead(in3);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 //Sensorabfrage 4
@@ -145,7 +141,7 @@ int getsensor4()
   soil[i]=analogRead(in4);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 //Sensorabfrage 5
@@ -158,7 +154,7 @@ int getsensor5()
   soil[i]=analogRead(in5);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 //Sensorabfrage 6
@@ -171,7 +167,7 @@ int getsensor6()
   soil[i]=analogRead(in6);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 //Sensorabfrage 7
@@ -184,7 +180,7 @@ int getsensor7()
   soil[i]=analogRead(in7);
   delay(2000);
   }
- return mittelwert(soil);
+ return median(soil);
 }
 
 
@@ -214,34 +210,34 @@ void test()
 
   serial.printf("Starte Pumpe\n");
   activatepump();
-  sleep(30);
+  sleep(5);
   
   serial.printf("Öffne Ventil 1\n");
   digitalWrite(vent0,HIGH);
   sleep(60);
   serial.printf("Schließe Ventil 1\n");
   digitalWrite(vent0,LOW);
-  sleep(10);
+  sleep(5);
 
   /*
-  printf("Öffne Ventil 2\n");
+  serial.printf("Öffne Ventil 2\n");
   digitalWrite(vent1,HIGH);
   sleep(60);
-  printf("Schließe Ventil 2\n");
+  serial.printf("Schließe Ventil 2\n");
   digitalWrite(vent1,LOW);
   sleep(10);
 
-  printf("Öffne Ventil 3\n");
+  serial.printf("Öffne Ventil 3\n");
   digitalWrite(vent2,HIGH);
   sleep(60);
-  printf("Schließe Ventil 3\n");
+  serial.printf("Schließe Ventil 3\n");
   digitalWrite(vent2,LOW);
   sleep(10);
 
-  printf("Öffne Ventil 4\n");
+  serial.printf("Öffne Ventil 4\n");
   digitalWrite(vent3,HIGH);
   sleep(60);
-  printf("Schließe Ventil 4\n");
+  serial.printf("Schließe Ventil 4\n");
   digitalWrite(vent3,LOW);
   sleep(10);
   */
@@ -255,11 +251,18 @@ void setup()
 {
   //Start Serial
   Serial.begin(115200);
+  //Pause für Aufbau Serial-Conntection
+  delay(1000);
+
+  //increment bootCount
+  bootCount++;
+  Serial.println("Boot number:" + String(bootCount));
 
   //ADC auf 12 Bit umschalten
   analogReadResolution(12);
 
   //Sensoren sind INPUTS
+  {
   pinMode(in0,INPUT);
   pinMode(in1,INPUT);
   pinMode(in2,INPUT);
@@ -268,26 +271,31 @@ void setup()
   pinMode(in5,INPUT);
   pinMode(in6,INPUT);
   pinMode(in7,INPUT);
- 
+  }
+
  // Pumpe und Ventile sind OUTPUTS
+ {
   pinMode(pump0,OUTPUT);
   pinMode(vent0,OUTPUT);
   pinMode(vent1,OUTPUT);
   pinMode(vent2,OUTPUT);
   pinMode(vent3,OUTPUT);
+ }
 
   //Rückstellung Ventile und Pumpe
   deactivateall();
 
   //Kalibrierung der Feuchtigkeit auf Einschaltzustand
-  soilshould[0]=getsensor0();
-  soilshould[1]=getsensor1();
-  //soilshould[2]=getsensor2();
-  //soilshould[3]=getsensor3();
-  //soilshould[4]=getsensor4();
-  //soilshould[5]=getsensor5();
-  //soilshould[6]=getsensor6();
-  //soilshould[7]=getsensor7();
+  {
+    soilshould[0]=getsensor0();
+    soilshould[1]=getsensor1();
+    //soilshould[2]=getsensor2();
+    //soilshould[3]=getsensor3();
+    //soilshould[4]=getsensor4();
+    //soilshould[5]=getsensor5();
+    //soilshould[6]=getsensor6();
+    //soilshould[7]=getsensor7();
+  }
 
   //Ausgabe der Kalibrierten Werte
   moisturecal();
@@ -295,16 +303,17 @@ void setup()
   //Teste auf Funktion der Wasserversorgung
   test();
 
-  //Warte 1min
+  //Warte 10sec
   sleep(10);
   }
+
 
 
 //LOOP-Bewässerung
 void loop() 
 {
 x=x+1;
-printf("Bewässerungsschleife Durchlauf:%d\n", x);
+serial.printf("Bewässerungsschleife Durchlauf:%d\n", x);
 
 //Prüfung der Werte
 //Abfragedauer ca. 20 sec pro Sensor. -> ca. 2min 40 sec. bei 8 Sensoren.
@@ -330,7 +339,7 @@ int k=0;
 //feuchter = niedrigere Spannung -> Wert geringer
 if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
 {
-  printf("Bewässerung für %d nötig",k);
+  serial.printf("Bewässerung für %d nötig",k);
   activatepump();
   delay(5000);
   digitalWrite(vent0,HIGH);
@@ -370,12 +379,13 @@ if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
 }
 
 /*
+{
 
 //VENTIL 1
 k=2;
 if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
 {
-  printf("Bewässerung für %d nötig",k);
+  serial.printf("Bewässerung für %d nötig",k);
   activatepump();
   delay(2000);
   digitalWrite(vent1,HIGH);
@@ -418,7 +428,7 @@ if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
 k=4;
 if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
 {
-  printf("Bewässerung für %d nötig",k);
+  serial.printf("Bewässerung für %d nötig",k);
   activatepump();
   delay(2000);
   digitalWrite(vent2,HIGH);
@@ -462,7 +472,7 @@ if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
 k=6;
 if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
 {
-  printf("Bewässerung für %d nötig",k);
+  serial.printf("Bewässerung für %d nötig",k);
   activatepump();
   delay(2000);
   digitalWrite(vent3,HIGH);
@@ -501,13 +511,13 @@ if((soilmid[k] > soilshould[k]) || (soilmid[k+1] > soilshould[k+1]))
         }
     }
 }
-
+}
   */
 
 
   //Rückstellung der Werte
   deactivateall();
-  printf("Bewässerungszyklus %d abgeschlossen", x);
+  serial.printf("Bewässerungszyklus %d abgeschlossen", x);
 
   //Schlafe 1h
   sleep(3600);
